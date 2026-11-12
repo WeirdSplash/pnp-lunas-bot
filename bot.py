@@ -50,7 +50,8 @@ LOGIN_URL = BASE + "Solicitud_Menu.aspx"
 SEG_URL = BASE + "Seguimiento.aspx"
 
 # IDs reales de la página (revisados el 12/11/2026)
-SEL_RESERVAR_ABRIR = 'input[type=submit][value="Reservar Cita"]:not([id*="idUcitas"])'
+SEL_VER_TRAMITE = "#MainContent_gvProgramacion_btnAccion_0"   # el "ojito" de la lista de trámites
+SEL_RESERVAR_ABRIR = "#MainContent_btnCita"
 SEL_CAPTCHA_IMG = "#img-captcha"
 SEL_CAPTCHA_INPUT = "#captcha-answer-input"
 SEL_CAPTCHA_BTN = "#btn-captcha-verify"
@@ -190,10 +191,18 @@ def login(page):
     page.locator('input[type=submit][value="Ingresar"]').click()
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(1500)
-    if page.locator(SEL_RESERVAR_ABRIR).count() == 0:
+    if "Seguimiento" not in page.url:
         page.goto(SEG_URL, wait_until="networkidle")
-    if page.locator(SEL_RESERVAR_ABRIR).count() == 0:
-        raise RuntimeError(f"No encontré el botón 'Reservar Cita' después del login (URL: {page.url})")
+    # Lista de trámites -> clic en el ojito para ver el detalle
+    if not page.locator(SEL_RESERVAR_ABRIR).is_visible():
+        if page.locator(SEL_VER_TRAMITE).count() == 0:
+            raise RuntimeError(f"No encontré el trámite (ojito) en la lista (URL: {page.url})")
+        postback(page, lambda: page.click(SEL_VER_TRAMITE))
+        page.wait_for_load_state("networkidle")
+    try:
+        page.wait_for_selector(SEL_RESERVAR_ABRIR, state="visible", timeout=20000)
+    except PWTimeout:
+        raise RuntimeError(f"No encontré el botón 'Reservar Cita' en el detalle (URL: {page.url})")
 
 
 def check(tg: Telegram, pw):
@@ -203,7 +212,7 @@ def check(tg: Telegram, pw):
     page = ctx.new_page()
     try:
         login(page)
-        page.locator(SEL_RESERVAR_ABRIR).first.click()
+        postback(page, lambda: page.click(SEL_RESERVAR_ABRIR))
         page.wait_for_selector(SEL_CAPTCHA_IMG, state="visible", timeout=30000)
 
         # --- captcha: lo resuelves tú
