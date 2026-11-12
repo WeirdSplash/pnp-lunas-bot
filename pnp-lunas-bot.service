@@ -1,0 +1,15 @@
+[Unit]
+Description=Monitor de citas lunas oscurecidas PNP (Telegram)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/opt/pnp-lunas-bot
+EnvironmentFile=/opt/pnp-lunas-bot/.env
+ExecStart=/opt/pnp-lunas-bot/venv/bin/python bot.py
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
