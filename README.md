@@ -67,7 +67,7 @@ Cada intento queda en `data/intentos.csv` (hora, día, resultado). Después de u
 ```bash
 grep HAY_FECHAS data/intentos.csv
 ```
-Si los cupos aparecen siempre, por ejemplo, los lunes a las 8am, ajusta `ACTIVE_DAYS`/`ACTIVE_HOURS` e `INTERVAL_MIN` para revisar solo en ese momento y más seguido.
+Si los cupos aparecen siempre, por ejemplo, los lunes a las 8am, ajusta `ACTIVE_SCHEDULE`, `PEAK_HOURS` y `PEAK_INTERVAL_MIN` para revisar solo en ese momento y más seguido.
 
 ## Notas
 - Si la PNP cambia la web (IDs o un reCAPTCHA real), el bot te manda la captura del error y habrá que ajustar los selectores al inicio de `bot.py`.

@@ -36,9 +36,11 @@ PNP_DNI = env("PNP_DNI", required=True)
 PNP_CLAVE = env("PNP_CLAVE", required=True)
 TG_TOKEN = env("TG_TOKEN", required=True)
 TG_CHAT_ID = env("TG_CHAT_ID", "")
-INTERVAL_MIN = int(env("INTERVAL_MIN", "45"))
-ACTIVE_HOURS = env("ACTIVE_HOURS", "7-20")          # hora local Lima, inicio-fin
-ACTIVE_DAYS = env("ACTIVE_DAYS", "0,1,2,3,4,5")     # 0=lunes ... 6=domingo
+INTERVAL_MIN = int(env("INTERVAL_MIN", "45"))      # intervalo normal
+PEAK_INTERVAL_MIN = int(env("PEAK_INTERVAL_MIN", "20"))  # intervalo en hora pico (mañanas)
+PEAK_HOURS = env("PEAK_HOURS", "7-11")             # hora pico, inicio-fin
+# Días y horas activas. 0=lunes ... 6=domingo. "días=inicio-fin;días=inicio-fin"
+ACTIVE_SCHEDULE = env("ACTIVE_SCHEDULE", "0,1,2,3,4=7-16;5=7-13")
 ANSWER_TIMEOUT_MIN = int(env("ANSWER_TIMEOUT_MIN", "10"))
 SEDE_VALUE = env("SEDE_VALUE", "1")                 # 1 = LIMA-LA VICTORIA
 HEADLESS = env("HEADLESS", "1") == "1"
@@ -132,18 +134,42 @@ class Telegram:
 def now():
     return datetime.now(TZ)
 
+def _parse_schedule(s):
+    sched = {}
+    for part in s.split(";"):
+        if not part.strip():
+            continue
+        days, hours = part.split("=")
+        h0, h1 = (int(x) for x in hours.split("-"))
+        for d in days.split(","):
+            sched[int(d)] = (h0, h1)
+    return sched
+
+SCHEDULE = _parse_schedule(ACTIVE_SCHEDULE)
+PEAK = tuple(int(x) for x in PEAK_HOURS.split("-"))
+
 def in_active_window(dt):
-    h0, h1 = (int(x) for x in ACTIVE_HOURS.split("-"))
-    days = {int(d) for d in ACTIVE_DAYS.split(",") if d.strip()}
-    return dt.weekday() in days and h0 <= dt.hour < h1
+    w = SCHEDULE.get(dt.weekday())
+    return bool(w) and w[0] <= dt.hour < w[1]
+
+def interval_for(dt):
+    return PEAK_INTERVAL_MIN if PEAK[0] <= dt.hour < PEAK[1] else INTERVAL_MIN
 
 def next_run_after(dt):
-    cand = dt + timedelta(minutes=INTERVAL_MIN)
-    for _ in range(7 * 24 * 4):
-        if in_active_window(cand):
-            return cand
-        cand += timedelta(minutes=15)
+    cand = dt + timedelta(minutes=interval_for(dt))
+    if in_active_window(cand):
+        return cand
+    # fuera de horario: saltar al inicio de la siguiente ventana activa
+    day = cand.replace(minute=0, second=0, microsecond=0)
+    for _ in range(8 * 24):
+        if in_active_window(day) and day > dt:
+            return day
+        day += timedelta(hours=1)
     return cand
+
+def schedule_text():
+    nombres = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
+    return ", ".join(f"{nombres[d]} {h0}-{h1}h" for d, (h0, h1) in sorted(SCHEDULE.items()))
 
 def record(result, fechas="", nota=""):
     new = not LOG_CSV.exists()
@@ -321,7 +347,8 @@ def main():
     tg.updates(wait=0)  # descarta mensajes viejos
     paused = False
     nxt = now() if in_active_window(now()) else next_run_after(now())
-    tg.send(f"🤖 Bot de lunas PNP activo. Cada {INTERVAL_MIN} min, {ACTIVE_HOURS}h. "
+    tg.send(f"🤖 Bot de lunas PNP activo.\nHorario: {schedule_text()}.\n"
+            f"Cada {PEAK_INTERVAL_MIN} min de {PEAK[0]} a {PEAK[1]}h, luego cada {INTERVAL_MIN} min.\n"
             f"Primer intento: {nxt:%a %d/%m %H:%M}.\n/check /estado /pausa /reanudar")
 
     with sync_playwright() as pw:
